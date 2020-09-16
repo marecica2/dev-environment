@@ -1,0 +1,142 @@
+#!/bin/bash
+
+SPFO_ENV=.env
+DOCKER="docker"
+COMPOSE="docker-compose"
+
+export $(cat $SPFO_ENV | xargs)
+
+function addRepo() {
+  REPOSRC=$1
+  LOCALREPO=$2
+  LOCALREPO_VC_DIR=$LOCALREPO/.git
+
+  if [ ! -d $LOCALREPO_VC_DIR ]; then
+    git clone $REPOSRC
+  fi
+}
+
+function initMaven() {
+  cd ..
+  cd $1
+  [[ -z $HTTP_PROXY ]] && SETTINGS='no-proxy-settings.xml' || SETTINGS='settings.xml'
+  info "using $SETTINGS for $1"
+  cp ../dev-environment/no-proxy-settings.xml ./settings.xml
+  git update-index --assume-unchanged ./settings.xml
+  cd ../dev-environment
+}
+
+function quit() {
+  exit 1
+}
+
+function info() {
+  echo -e "\x1B[33m$1\x1B[0m"
+}
+
+function success() {
+  echo -e "\x1B[32m$1\x1B[0m"
+}
+
+function stackStart() {
+  info "== Starting Stack ... =="
+  info "== Starting infrastructure services =="
+
+  echo "Starting services: ${APPS//,/ }"
+  $COMPOSE up -d --remove-orphans --build ${APPS//,/ }
+
+  info "== Checking running services =="
+  ${COMPOSE} ps
+  docker exec -it spfo_proxy nginx -s reload || true
+  success "== Done =="
+}
+
+function stackStop() {
+  $COMPOSE -f docker-compose.yml stop
+  success "== Done =="
+}
+
+function stackClear() {
+  info "== Cleaning docker containers =="
+  appStop
+  ${DOCKER} system prune
+  ${DOCKER} images -q --no-trunc | xargs ${DOCKER} rmi -f || true
+}
+
+if [[ $# -gt 0 ]]; then
+
+  if [[ "$1" == "init" ]]; then
+    cd ..
+    addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/frontend.git" "frontend"
+    addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/submission-service.git" "submission-service"
+    addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/file-service.git" "file-service"
+    addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/file-service.git" "iam-service"
+    cd dev-environment
+
+  elif [[ "$1" == "start" ]]; then
+    initMaven "submission-service"
+    initMaven "file-service"
+    stackStart
+
+  elif [[ "$1" == "stop" ]]; then
+    stackStop
+
+  elif [[ "$1" == "clear" ]]; then
+    stackClear
+
+  elif [[ "$1" == "dbdump" ]]; then
+    mysqldump -u root -psp123_root --all-databases >all_databases.sql
+
+  elif [[ "$1" == "beagle" ]]; then
+    export HTTP_PROXY=http://proxy.internal.epo.org:8080
+    export HTTPS_PROXY=$HTTP_PROXY
+    export NO_PROXY=.internal.epo.org,localhost,127.0.0.1
+    export http_proxy=$HTTP_PROXY
+    export https_proxy=$HTTP_PROXY
+    export no_proxy=$NO_PROXY
+    export KUBECONFIG=~/.kube/config.beagle
+    kubectl config set-cluster beagle --insecure-skip-tls-verify=true --server=https://beaglekube.internal.epo.org:443
+    kubectl config use-context beagle --namespace=spfo
+    kubectl get pods
+    alias k='kubectl'
+
+  elif [[ "$1" == "minikube" ]]; then
+    export KUBECONFIG=~/.kube/config
+    kubectl config use-context minikube --namespace=default
+    alias k='kubectl'
+    minikube start
+    # helm install -f values.yaml -n spfo iam-service .
+    # helm upgrade -f values.yaml -n spfo iam-service .
+
+  elif [[ "$1" == "yarn" ]]; then
+    cd ../frontend || exit
+    if [ ! -z $HTTP_PROXY ]; then
+      yarn config set proxy $HTTP_PROXY -s
+      yarn config set https-proxy $HTTP_PROXY -s
+    fi
+    shift 1
+    yarn $@
+    yarn config delete proxy -s
+    yarn config delete https-proxy -s
+
+  elif [[ "$1" == "help" ]]; then
+    success "Available commands"
+    info "start    -  Starts the current stack"
+    info "stop     -  Stops the current stack"
+    info "clear    -  Resets stack clears all containers and orphaned volumes"
+    info "dbdump   -  Creates a mysql instance dump"
+    info "beagle   -  Sets up kubectl beagle profile and alias k"
+    info "minikube -  Deploys to local minikube"
+    info "yarn     -  Executes yarn command in the spfo_frontend container"
+
+  elif [[ "$1" == "quit" ]]; then
+    quit
+
+  else
+
+    ${COMPOSE} "$@"
+  fi
+
+else
+  ${COMPOSE} ps
+fi

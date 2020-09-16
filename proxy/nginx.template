@@ -1,0 +1,92 @@
+events {
+  worker_connections  1024;  ## Default: 1024
+}
+
+http {
+
+  server {
+        listen 80;
+        listen 0.0.0.0:443 ssl;
+        server_name spfo;
+        ssl_certificate /etc/nginx/ssl/spfo.crt;
+        ssl_certificate_key /etc/nginx/ssl/spfo.key;
+        client_max_body_size 1000M;
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+
+        location /sp-ui-npefiling/web {
+            proxy_pass http://${DOCKER_LOOPBACK_ADDRESS_HOST}:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+        
+        location /auth {
+            proxy_pass https://iam-service:8443/auth;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header Host ${host};
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+        
+        location /auth/.well-known {
+            proxy_pass https://iam-service:8443/auth/realms/front-office-public/.well-known;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header Host ${host};
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+        
+        location /sp-ui-npefiling/npefiling-api {
+            proxy_pass http://${DOCKER_LOOPBACK_ADDRESS_HOST}:${BE_NPEFILING_PORT}/api;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+
+        location /static {
+            proxy_pass http://${DOCKER_LOOPBACK_ADDRESS_HOST}:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+
+        location / {
+            proxy_pass http://${DOCKER_LOOPBACK_ADDRESS_HOST}:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+
+        location /sockjs-node {
+            proxy_pass http://${DOCKER_LOOPBACK_ADDRESS_HOST}:3000;
+            proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_redirect off;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header X-Forwarded-Host ${host};
+            proxy_set_header X-Forwarded-Port ${server_port};
+        }
+  }
+}
