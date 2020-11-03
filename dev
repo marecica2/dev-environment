@@ -43,7 +43,7 @@ function stackStart() {
   info "== Starting infrastructure services =="
 
   echo "Starting services: ${APPS//,/ }"
-  $COMPOSE up -d --remove-orphans --build ${APPS//,/ }
+  $COMPOSE --env-file ./.env up -d --remove-orphans  --build ${APPS//,/ }
 
   info "== Checking running services =="
   ${COMPOSE} ps
@@ -71,11 +71,13 @@ if [[ $# -gt 0 ]]; then
     addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/submission-service.git" "submission-service"
     addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/file-service.git" "file-service"
     addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/file-service.git" "iam-service"
+    addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/eolf-integration-service.git" "eolf-integration-service"
     cd dev-environment
 
   elif [[ "$1" == "start" ]]; then
     initMaven "submission-service"
     initMaven "file-service"
+    initMaven "eolf-integration-service"
     stackStart
 
   elif [[ "$1" == "stop" ]]; then

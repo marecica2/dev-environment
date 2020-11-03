@@ -29,6 +29,17 @@ services:
     volumes:
       - ./sp-db/mysql_init/my.cnf:/etc/mysql/my.cnf
       - ./sp-db/sql_scripts/:/docker-entrypoint-initdb.d/
+  mongodb:
+    container_name: eolf_integration_service_db
+    environment:
+      - MONGO_INITDB_DATABASE=eolf_integration
+      - MONGO_INITDB_ROOT_USERNAME=eolf
+      - MONGO_INITDB_ROOT_PASSWORD=eolf
+    image: mongo:4.2.10
+    volumes:
+      - ./integration-db/:/docker-entrypoint-initdb.d/
+    ports:
+      - 27017:27017
   web:
     container_name: spfo_frontend
     image: spfo_frontend
@@ -44,8 +55,6 @@ services:
     volumes:
       - ../frontend:/app
       - /app/node_modules
-    environment:
-      - CHOKIDAR_USEPOLLING=true
   submission-service:
     container_name: spfo_submission
     image: spfo_submission
@@ -97,3 +106,19 @@ services:
     ports:
     - 7000:8000
     - 7443:8443
+  eolf-integration:
+    container_name: eolf_integration_service
+    build:
+      context: ../eolf-integration-service
+      dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: $HTTP_PROXY
+        HTTPS_PROXY: $HTTP_PROXY
+    environment:
+      - DB_URI=mongodb://integration:integration@mongodb:27017/eolf_integration
+      - SPRING_PROFILES_ACTIVE=oid
+    ports:
+      - '5001:5001'
+    depends_on:
+      - mongodb
+    restart: always
