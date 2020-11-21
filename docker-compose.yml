@@ -1,7 +1,7 @@
 version: '3.7'
 services:
   proxy:
-    container_name: spfo_proxy
+    container_name: proxy
     image: nginx:alpine
     ports:
       - $PROXY_PORT:80
@@ -16,7 +16,7 @@ services:
       - ./proxy:/etc/nginx
     command: sh -c "envsubst \"`env | awk -F = '{printf \" $$%s\", $$1}'`\" < /etc/nginx/nginx.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
   db:
-    container_name: spfo_db
+    container_name: db
     image: mysql:5.7
     command: --default-authentication-plugin=mysql_native_password
     environment:
@@ -30,7 +30,7 @@ services:
       - ./sp-db/mysql_init/my.cnf:/etc/mysql/my.cnf
       - ./sp-db/sql_scripts/:/docker-entrypoint-initdb.d/
   mongodb:
-    container_name: eolf_integration_service_db
+    container_name: mongodb
     environment:
       - MONGO_INITDB_DATABASE=eolf_integration
       - MONGO_INITDB_ROOT_USERNAME=eolf
@@ -41,8 +41,8 @@ services:
     ports:
       - 27017:27017
   web:
-    container_name: spfo_frontend
-    image: spfo_frontend
+    container_name: web
+    image: web
     build:
       context: ../frontend
       dockerfile: Dockerfile.dev
@@ -56,11 +56,11 @@ services:
       - ../frontend:/app
       - /app/node_modules
   submission-service:
-    container_name: spfo_submission
-    image: spfo_submission
+    container_name: submission-service
+    image: submission-service
     build:
       context: ../submission-service
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
       args:
         HTTP_PROXY: $HTTP_PROXY
         HTTPS_PROXY: $HTTP_PROXY
@@ -73,26 +73,29 @@ services:
       - DB_USER=$DB_USER
       - DB_PASSWORD=$DB_PASSWORD
       - BE_NPEFILING_STORAGE_PATH=$BE_NPEFILING_STORAGE_PATH
-  file-service:
-    container_name: spfo_file
-    image: spfo_file
-    build:
-      context: ../file-service
-      dockerfile: Dockerfile
-      args:
-        HTTP_PROXY: $HTTP_PROXY
-        HTTPS_PROXY: $HTTP_PROXY
-    ports:
-      - 3002:3002
-    environment:
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=$FILE_DB_DATABASE
-      - DB_USER=$FILE_DB_USER
-      - DB_PASSWORD=$FILE_DB_PASSWORD
-      - BE_NPEFILING_STORAGE_PATH=$BE_NPEFILING_STORAGE_PATH
+      - IAM_OIDC_JWK_ENDPOINT=$IAM_OIDC_JWK_ENDPOINT
+      - SPRING_PROFILES_ACTIVE=oid
+#  file-service:
+#    container_name: file-service
+#    image: file-service
+#    build:
+#      context: ../file-service
+#      dockerfile: Dockerfile.dev
+#      args:
+#        HTTP_PROXY: $HTTP_PROXY
+#        HTTPS_PROXY: $HTTP_PROXY
+#    ports:
+#      - 3002:3002
+#    environment:
+#      - DB_HOST=db
+#      - DB_PORT=3306
+#      - DB_DATABASE=$FILE_DB_DATABASE
+#      - DB_USER=$FILE_DB_USER
+#      - DB_PASSWORD=$FILE_DB_PASSWORD
+#      - BE_NPEFILING_STORAGE_PATH=$BE_NPEFILING_STORAGE_PATH
+#      - SPRING_PROFILES_ACTIVE=oid
   iam-service:
-    container_name: iam_service
+    container_name: iam-service
     image: jboss/keycloak
     environment:
       - KEYCLOAK_USER=admin
@@ -106,8 +109,8 @@ services:
     ports:
     - 7000:8000
     - 7443:8443
-  eolf-integration:
-    container_name: eolf_integration_service
+  eolf-integration-service:
+    container_name: eolf-integration-service
     build:
       context: ../eolf-integration-service
       dockerfile: Dockerfile
@@ -117,6 +120,7 @@ services:
     environment:
       - DB_URI=mongodb://integration:integration@mongodb:27017/eolf_integration
       - SPRING_PROFILES_ACTIVE=oid
+      - IAM_OIDC_JWK_ENDPOINT=$IAM_OIDC_JWK_ENDPOINT
     ports:
       - '5001:5001'
     depends_on:

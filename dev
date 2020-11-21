@@ -3,8 +3,14 @@
 SPFO_ENV=.env
 DOCKER="docker"
 COMPOSE="docker-compose"
+USE_PROXY=false
+HTTP_PROXY=http://proxy.internal.epo.org:8080
+HTTPS_PROXY=http://proxy.internal.epo.org:8080
+http_proxy=http://proxy.internal.epo.org:8080
+https_proxy=http://proxy.internal.epo.org:8080
 
-export $(cat $SPFO_ENV | xargs)
+#export $(cat $SPFO_ENV | xargs)
+#printenv
 
 function addRepo() {
   REPOSRC=$1
@@ -19,7 +25,7 @@ function addRepo() {
 function initMaven() {
   cd ..
   cd $1
-  [[ -z $HTTP_PROXY ]] && SETTINGS='no-proxy-settings.xml' || SETTINGS='settings.xml'
+  [ $USE_PROXY = true ] && SETTINGS='settings.xml' || SETTINGS='no-proxy-settings.xml'
   info "using $SETTINGS for $1"
   cp ../dev-environment/no-proxy-settings.xml ./settings.xml
   git update-index --assume-unchanged ./settings.xml
@@ -42,17 +48,17 @@ function stackStart() {
   info "== Starting Stack ... =="
   info "== Starting infrastructure services =="
 
-  echo "Starting services: ${APPS//,/ }"
-  $COMPOSE --env-file ./.env up -d --remove-orphans  --build ${APPS//,/ }
+  echo "Starting services: $@"
+  $COMPOSE --env-file ./.env up -d --remove-orphans  --build "$@"
 
   info "== Checking running services =="
   ${COMPOSE} ps
-  docker exec -it spfo_proxy nginx -s reload || true
+  docker exec -it proxy nginx -s reload || true
   success "== Done =="
 }
 
 function stackStop() {
-  $COMPOSE -f docker-compose.yml stop
+  $COMPOSE -f docker-compose.yml stop ${APPS//,/ }
   success "== Done =="
 }
 
@@ -63,9 +69,26 @@ function stackClear() {
   ${DOCKER} images -q --no-trunc | xargs ${DOCKER} rmi -f || true
 }
 
+
+while getopts :p opt; do
+    case $opt in
+        p) USE_PROXY=true ;;
+       \?) echo "Unknown option -$OPTARG"; exit 1;;
+    esac
+done
+
+shift $(( OPTIND - 1 ))
+
+if $USE_PROXY; then
+    info USE_PROXY=$USE_PROXY
+else
+    info USE_PROXY=$USE_PROXY
+fi
+
+
 if [[ $# -gt 0 ]]; then
 
-  if [[ "$1" == "init" ]]; then
+  if [[ "$1" == "pull" ]]; then
     cd ..
     addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/frontend.git" "frontend"
     addRepo "ssh://git@bitbucket-p.internal.epo.org:7999/ic/submission-service.git" "submission-service"
@@ -78,7 +101,8 @@ if [[ $# -gt 0 ]]; then
     initMaven "submission-service"
     initMaven "file-service"
     initMaven "eolf-integration-service"
-    stackStart
+    shift 1
+    stackStart "$@"
 
   elif [[ "$1" == "stop" ]]; then
     stackStop
@@ -112,9 +136,9 @@ if [[ $# -gt 0 ]]; then
 
   elif [[ "$1" == "yarn" ]]; then
     cd ../frontend || exit
-    if [ ! -z $HTTP_PROXY ]; then
-      yarn config set proxy $HTTP_PROXY -s
-      yarn config set https-proxy $HTTP_PROXY -s
+    if [ $USE_PROXY = true ]; then
+      yarn config set proxy $HTTP_PROXY
+      yarn config set https-proxy $HTTP_PROXY
     fi
     shift 1
     yarn $@
@@ -123,8 +147,10 @@ if [[ $# -gt 0 ]]; then
 
   elif [[ "$1" == "help" ]]; then
     success "Available commands"
-    info "start    -  Starts the current stack"
-    info "stop     -  Stops the current stack"
+    info "pull     -  Pull all repos"
+    info "start    -  Starts the current stack (shorthand for docker-compose start)"
+    info "stop     -  shorthand for docker-compose stop"
+    info "rm       -  shorthand for docker-compose rm"
     info "clear    -  Resets stack clears all containers and orphaned volumes"
     info "dbdump   -  Creates a mysql instance dump"
     info "beagle   -  Sets up kubectl beagle profile and alias k"
@@ -135,8 +161,7 @@ if [[ $# -gt 0 ]]; then
     quit
 
   else
-
-    ${COMPOSE} "$@"
+    ${COMPOSE} "$@" ${APPS//,/ }
   fi
 
 else

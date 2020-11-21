@@ -26,7 +26,7 @@ http {
         }
         
         location /auth {
-            proxy_pass https://iam-service:8443/auth;
+            proxy_pass https://${DOCKER_LOOPBACK_ADDRESS_HOST}:7443/auth;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
@@ -37,7 +37,7 @@ http {
         }
         
         location /auth/.well-known {
-            proxy_pass https://iam-service:8443/auth/realms/front-office-public/.well-known;
+            proxy_pass https://${DOCKER_LOOPBACK_ADDRESS_HOST}:7443/auth/realms/front-office-public/.well-known;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
